@@ -33,6 +33,9 @@ module myio
     integer, parameter ::  myio_err_GBCOMtype = 26 
     integer, parameter ::  myio_err_GBinputfile = 27
     integer, parameter ::  myio_err_GBinputlabel = 28 
+    integer, parameter ::  myio_err_nnucl_sph = 29
+    integer, parameter ::  myio_err_outputfile = 30
+
 
     integer :: num_cNaCl   ! number of salt concentration considered
     integer :: num_cMgCl2
@@ -66,9 +69,9 @@ module myio
     private
 
     public :: read_inputfile, output_individualcontr_fe, output, compute_vars_and_output, write_chain_config
-    public :: myio_err_chainsfile, myio_err_energyfile, myio_err_chainmethod, myio_err_geometry
+    public :: myio_err_chainsfile, myio_err_energyfile, myio_err_chainmethod, myio_err_geometry, myio_err_file_exist
     public :: myio_err_graft, myio_err_index, myio_err_conf, myio_err_nseg, myio_err_readfile, myio_err_equilat 
-    public :: myio_err_GBinputfile, myio_err_GBinputlabel
+    public :: myio_err_GBinputfile, myio_err_GBinputlabel, myio_err_nnucl_sph, myio_err_outputfile
     public :: num_cNaCl, num_cMgCl2, num_cKCl, num_cFeCl2, num_cFeCl3 
     public :: cNaCl_array, cMgCl2_array, cKCl_array, cFeCl2_array, cFeCl3_array
     public :: set_value_NaCl, set_value_MgCl2, set_value_KCl, set_value_FeCl2, set_value_FeCl3
@@ -100,7 +103,7 @@ subroutine read_inputfile(info)
     integer :: line
     logical :: isSet_maxnchains, isSet_maxnchainsxy, isSet_precondition, isSet_write_Palpha,  isSet_EnergyShift
     logical :: isSet_maxfkfunevals, isSet_maxniter, isSet_pbc_chains, isSet_GBtype, isSet_GBCOMtype
-    logical :: isSet_pO2, isSet_write_oxygen
+    logical :: isSet_pO2, isSet_write_oxygen,  isSet_nnucl,  isSet_nnucl_sph
 
     if (present(info)) info = 0
 
@@ -128,6 +131,8 @@ subroutine read_inputfile(info)
     isSet_GBtype       =.false.
     isSet_GBCOMtype    =.false.
     isSet_pO2          =.false.
+    isSet_nnucl        =.false.
+    isSet_nnucl_sph    =.false.
 
     write_mc_chains    =.false.
     write_struct       =.false.
@@ -373,6 +378,11 @@ subroutine read_inputfile(info)
             case ('GBCOMtype')
                 read(buffer, *,iostat=ios) GBCOMtype 
                 isSet_GBCOMtype=.true. 
+            case ('nnucl_sph')
+                read(buffer,*,iostat=ios) nnucl_sph  
+                isSet_nnucl=.true. 
+            case ('nseg_sph')
+                read(buffer,*,iostat=ios) nseg_sph
             case default
                 if(pos>1) then
                     print *, 'Invalid label at line', line  ! empty lines are skipped

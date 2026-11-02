@@ -7,10 +7,13 @@ module globals
     use mathconst
   
     implicit none
-  
-    !     .. variables
 
+    ! .. variables  
+    
     integer  :: nsize         ! size lattice, numer of layers
+  
+    !  .. variables of input nucloesome/ncp conformation
+
     integer  :: nnucl         ! number of nucleosome
     integer  :: nseg          ! number of segment 
     integer  :: nsegAA        ! number of AA segments
@@ -22,7 +25,15 @@ module globals
     integer  :: max_confor    ! maximum number of configurations
     integer  :: set_confor    ! number that indicates which set of configuration to use in 
     integer  :: local_conf    ! conformation number used from set
-  
+
+    !  .. variables of output nucloesome/ncp conformation
+
+    integer :: nseg_sph      ! number of spheriod/nucleosme 
+    integer :: nnucl_sph 
+    real(dp) :: lseg_sph     
+    integer :: max_confor_sph
+
+
     ! .. development variables
     integer :: nsegsource     ! number of segment in source traj files
     integer :: s_begin        ! first segment to actually use from source traj file

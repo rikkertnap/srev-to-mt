@@ -186,7 +186,7 @@ contains
 
 
     
-    !  Computes rotation axis and angle between vecor u and v
+    !  Computes rotation axis and angle between vector u and v
     !  tan(theta)=sin(theta)/cos(theta)= ||u x v||/ (u,v)
     !  Here atan2(y, x) computes the principal value of the argument
     !  function of the complex number x + i y
@@ -204,6 +204,8 @@ contains
         norm_rotaxis = vec_norm(rotaxis)
         
         theta  = atan2(norm_rotaxis, dot)
+
+        ! rotaxis  = rotaxis  /norm_rotaxis
 
     end subroutine rot_axis_angle
 

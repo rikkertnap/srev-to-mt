@@ -44,7 +44,7 @@ module volume
     public :: inverse_indexneighbor_phos
     public :: coordtoindex,indextocoord
     public :: coordinateFromLinearIndex, linearIndexFromCoordinate
-    public :: xt, yt, ut, vt, ipbc
+    public :: xt, yt, ut, vt, ipbc, pbc
     public :: make_geometry
 
     public :: allocate_index_neighbors_phos, make_table_index_neighbors_phos
@@ -279,6 +279,22 @@ contains
     end function
          
    
+    ! .. compute periodic boundary condition in z direction
+    ! .. maps z onto interval [0,deltaz]
+
+    function pbc(z,deltaz) result(zpbc)
+        implicit none 
+        real(dp), intent(in) :: deltaz
+        real(dp), intent(in) :: z
+        real(dp) :: zpbc 
+        if(z>0) then 
+            zpbc=z-int(z/deltaz)*deltaz
+        else
+            zpbc=z-(int(z/deltaz)-1)*deltaz
+        endif   
+    end function
+
+
 !   subroutine allocate_index_neighbors(maxneigh)
 !
 !        use globals, only : nsize

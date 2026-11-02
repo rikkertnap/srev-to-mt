@@ -413,7 +413,7 @@ subroutine orientation_vector(chain,orient_triplets,orient_vectors)
 end subroutine orientation_vector
 
 
-! Calculation the orientation vector  of reference histone  
+! Calculation the orientation vector of reference histone  
 ! Orientation vector defined as the normal vector to the plane spanned three points
 ! input: real(dp)  chain_elem(3,nseg)%elem()  : coordiantes of AA chain elems segments need on CA=> elem(1) 
 !        integer   orient_triplet_ref(3)      : AA segment id (sAA) of triplet of point ( plane ) 1=origin=CA 
@@ -668,6 +668,62 @@ subroutine check_chain_elem_index_and_chain(nseg,nelem,chain_elem_index,chain,is
     isSame=flag
 
 end subroutine check_chain_elem_index_and_chain
+
+
+! Rotates chain(3,n) into  chain(3,nelem) for rotation that roates vector a into vector b 
+! input: real(dp)  chain(3,n) : cartesian coordiantes chain of  n elememnts  
+!        real(dp )  a         : vector to rotate 
+!        real(dp )  b         : target vector 
+! output: real(dp) chain_rot(3,n)  : rotated chain
+
+subroutine rotate_chain(chain,chain_rot,a,b)
+    
+    use globals, only     : DEBUG
+    use quaternions, only : rot_axis_angle, rot_axis_angle_to_quat, rotation_matrix_from_quat, vec_norm 
+
+    real(dp), intent(in)    :: chain(:,:)
+    real(dp), intent(inout) :: chain_rot(:,:)
+    real(dp), intent(in)    :: a(3) ! vector to rotate
+    real(dp), intent(in)    :: b(3) ! target vector
+
+    ! local arguments 
+
+    integer  :: s, k, ndim
+    real(dp) :: u(3), unorm, angle
+    real(dp) :: q(4)
+    real(dp) :: Rmat(3,3)
+    real(dp) :: xvec(3), wvec(3)
+
+    ndim = size(chain,2)
+
+    ! rotation of orientation vector  
+
+    call rot_axis_angle(a, b, u, angle)
+    unorm = vec_norm(u)
+    u(1:3) = u(1:3)/unorm         ! rotation axis 
+
+    if(abs(angle)<epsAngle) u=a   ! angle ==0 no rotation u=>a  
+
+    q = rot_axis_angle_to_quat(u, angle)   ! rotation quaternion
+    call rotation_matrix_from_quat(q,Rmat)  
+
+    ! apply rotation to chain
+
+    do s=1,ndim 
+        xvec =chain(:,s)       
+        wvec = matmul(Rmat,xvec)
+        chain_rot(:,s) = wvec  ! assign rotation
+    enddo 
+    
+    if(DEBUG) then 
+        print*,"Module : chain_rotation : rotate_chain"
+        do s=1,ndim
+            print*,"s=",s," ",(chain(k,s),k=1,3)
+        enddo    
+    endif
+
+end subroutine rotate_chain
+    
 
 
 end module chain_rotation

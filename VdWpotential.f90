@@ -47,8 +47,8 @@ module VdW_potential
     real(dp) :: EGB_threshold = 0.5_dp 
 
     private :: dotproduct, pbc
-    private :: make_com_unit_vector_nucl_simple,make_com_unit_vector_nucl_simpleCOM 
-    private :: make_com_unit_vector_nucl_rotation
+    !private :: make_com_unit_vector_nucl_simple !,make_com_unit_vector_nucl_simpleCOM 
+    ! private :: make_com_unit_vector_nucl_rotation
     private :: parameter_com_ref, parameter_com, normal_vector
     !private :: un_traj_com
     private :: segnumAAstartGBcom, segnumAAendGBcom
@@ -416,7 +416,8 @@ contains
     ! pre : chain conformation and segcm and segunitvector
     ! post: effective VGB energy conformation using location COM of nucleosome
     ! VLJ(u1,u2,r) = Gay-Berne potential 
-    ! NB This function is equivalent to VGBenergyeffective, but latter one nicier !!!
+    ! Assumes that the directionof the vector connecting AAs number segcom and segunitvector 
+    ! is an unitvector. 
 
     function  GBenergyeffective_comb(chain,nmer)result(Energy)
 
@@ -500,8 +501,9 @@ contains
 
         real(dp) :: rcom(3,nmer)
         real(dp) :: uvector(3,nmer)
+        integer :: info,  un_traj_com
 
-        select case (GBCOMtype)
+        select case (GBCOMtype) ! GBCOMtype selects algorithm to make com and unitvectors
         case ("simple") 
 
             call make_com_unit_vector_nucl_simple(chain,nmer,segcm,segunitvector,rcom,uvector)
@@ -522,12 +524,14 @@ contains
         end select
 
         Energy = GBenergyeff(nmer,rcom,uvector,no_overlap)
-
+  
+        print*,"rcom   =", rcom
+        print*,"uvector=", uvector
         ! 
-        !info = 1
-        !un_traj_com= open_chain_com_unitvec_lammps_trj(info)
-        !call write_chain_com_unitvec_lammps_trj(un_traj_com,rcom,uvector)
-        !close(un_traj_com)
+        info = 1
+        un_traj_com= open_chain_com_unitvec_lammps_trj(info)
+        call write_chain_com_unitvec_lammps_trj(un_traj_com,rcom,uvector)
+        close(un_traj_com)
 
     end function GBenergyeffective
 
@@ -797,7 +801,7 @@ contains
     ! 2. orientation vector: using 3 points and 3 point of a reference to compute rotation and apply rotation 
     !    one referece orientation vector 
     ! pre:  subroutine  init_GBenergyeffective
-    ! input :  real(dp :: chainchain(:,:) conformation 
+    ! input :  real(dp :: chain(:,:) conformation 
     !          integer :: nmer : nnucl
     !          integer :: unitvector_triplets(:) atom_id used to make unit vector
     ! output:  real(dp) :: rcom(:,:)    : com of each nucleosome 
@@ -920,6 +924,7 @@ contains
 
             ! assign vector 
             uvector(:,n)=unit_vec
+            print*,"unit_vec_ref=",unit_vec_ref    
 
         enddo   
   
@@ -1011,20 +1016,23 @@ contains
 
     subroutine write_chain_com_unitvec_lammps_trj(un_trj,rveccom,unitvector)
 
-        use globals, only : nnucl
+        ! use globals, only : nnucl
         use volume, only : delta, nx, ny, nz 
         use quaternions, only :  rot_axis_angle, rot_axis_angle_to_quat
         use GB_potential, only : sigmaS,sigmaE  
+        use quaternions, only : quat_norm, vec_norm
 
         integer, intent(in) :: un_trj
         real(dp), dimension(:,:), intent(in) :: rveccom
         real(dp), dimension(:,:), intent(in) :: unitvector
         
-        integer ::  n
+        integer ::  n, numnucl
         real(dp) :: xbox0, xbox1(3)
         integer :: idatom, item
         real(dp) :: shapex,shapey,shapez
         real(dp) :: rcom(3), uvec(3), uref(3), qu(4), rotaxis(3), theta
+
+        numnucl = size(rveccom, 2) ! asummes dimension rveccom represent correct 
 
         xbox0 = 0.0_dp 
         xbox1(1) = nx*delta*10.0_dp ! conversion form nm -> Angstrom
@@ -1047,21 +1055,24 @@ contains
         write(un_trj,'(14A)')'ITEM: TIMESTEP' 
         write(un_trj,*)conf_write_com 
         write(un_trj,'(21A)')'ITEM: NUMBER OF ATOMS' 
-        write(un_trj,*)nnucl
+        write(un_trj,*)numnucl
         write(un_trj,'(25A)')'ITEM: BOX BOUNDS ff ff ff'
         write(un_trj,*)xbox0,xbox1(1)
         write(un_trj,*)xbox0,xbox1(2)
         write(un_trj,*)xbox0,xbox1(3)
         write(un_trj,'(70A)')'ITEM: ATOMS id type x y z quatw quati quatj quatk shapex shapey shapez'
         
-        do n=1,nnucl
+        do n=1, numnucl 
             
             rcom = rveccom(:,n) * 10.0_dp 
             uvec = unitvector(:,n) ! unit less
 
             call rot_axis_angle(uref, uvec, rotaxis, theta) 
+            rotaxis=rotaxis/vec_norm(rotaxis)
             qu = rot_axis_angle_to_quat(rotaxis, theta) 
 
+            ! print*,"norm uvec=",vec_norm(uvec)," norm  qu=",quat_norm(qu),"rotaxis ",vec_norm(rotaxis)
+            ! print*,"qu=",qu," norm  qu=",quat_norm(qu)
             item=item+1  
             write(un_trj,*)item,idatom,rcom(1),rcom(2),rcom(3),qu(1),qu(2),qu(3),qu(4),shapex,shapey,shapez
 
@@ -1075,7 +1086,7 @@ contains
     ! input:        integer : info : value 0 no errors
     ! output/return integer : un_trj : unit nubmer of file
 
-    function open_chain_com_unitvec_lammps_trj(info)result(un_trj)
+    function open_chain_com_unitvec_lammps_trj(info,text)result(un_trj)
 
     
         use myutils, only : newunit, lenText
@@ -1083,6 +1094,7 @@ contains
         use GB_potential, only : GBtype, GBCOMtype
 
         integer, intent(inout) :: info
+        character(len=*), intent(in),optional :: text ! extra filename descriptor 
 
         integer :: un_trj
 
@@ -1093,7 +1105,13 @@ contains
         
         info = 0    
 
-        fname='trajcomunit_'//trim(adjustl(GBtype))//trim(adjustl(GBCOMtype))
+        if(present(text)) then
+            fname='trajcomunit_'//trim(adjustl(text))//'_'
+        else
+            fname='trajcomunit_'
+        endif
+
+        fname=trim(fname)//trim(adjustl(GBtype))//trim(adjustl(GBCOMtype))
         fname=trim(adjustl(fname))//'.lammpstrj'
        
         inquire(file=fname,exist=exist)

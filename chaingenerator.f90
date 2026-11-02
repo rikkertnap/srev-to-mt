@@ -30,6 +30,10 @@ module chaingenerator
     public :: find_phosphate_location
     public :: write_indexchain_histone, test_index_histone
 
+    ! made public to be used in chaingenerator_spheroid
+    public :: open_chain_xyz, write_chain_xyz
+    public :: conf_write_chain, open_chain_energy, open_chain_lammps_trj, write_chain_lammps_trj
+
     private :: eps_equilat,fmt3xyz, COMOLD
 
 contains
@@ -81,12 +85,15 @@ subroutine make_chains_mc()
     use random, only : seed
     use parameters, only : lseg, write_mc_chains, isVdW, isVdWintEne
     use parameters, only : maxnchainsrotations, maxnchainsrotationsxy
+    use parameters, only : pbc_chains
     use volume, only : nx, ny, nz, delta, geometry
     use volume, only : coordinateFromLinearIndex, linearIndexFromCoordinate
     use volume, only : ut, vt
     use myutils, only : print_to_log, lenText, LogUnit
     use cadenas_linear
     use cadenas_sequence
+
+    !  use chain_spheroid, only : orientation_spheriod_chain
 
     !     .. variable and constant declaractions      
 
@@ -170,10 +177,16 @@ subroutine make_chains_mc()
                 
                 do s=1,nseg 
 
-                    ! .. periodic boundary conditions in x-direction and y-direction 
-                    chain_rot(2,s) = pbc(x(s),Lx)
-                    chain_rot(3,s) = pbc(y(s),Ly)
-                    chain_rot(1,s) = pbc(z(s),Lz)        
+                    if(pbc_chains) then 
+                        ! .. periodic boundary conditions in x-direction and y-direction 
+                        chain_rot(2,s) = pbc(x(s),Lx)
+                        chain_rot(3,s) = pbc(y(s),Ly)
+                        chain_rot(1,s) = pbc(z(s),Lz)        
+                    else 
+                        chain_rot(2,s) = x(s)
+                        chain_rot(3,s) = y(s)
+                        chain_rot(1,s) = z(s)   
+                    endif 
 
                     ! .. transforming form real- to lattice coordinates                 
                     xi = int(chain_rot(2,s)/delta)+1
@@ -185,7 +198,9 @@ subroutine make_chains_mc()
                     if(idx<=0) then
                         print*,"index=",idx, " xi=",xi," yi=",yi," zi=",zi, "conf=",conf,"s=",s 
                     endif
-                enddo            
+                enddo   
+
+               ! call orientation_spheriod_chain(chain_rot,nseg)            
         
                 conf = conf +1 
 
@@ -267,6 +282,7 @@ subroutine read_chains_xyz(systype,info)
 
     if(systype=="nucl_neutral_sv".or.systype=="nucl_ionbin_sv".or.systype=="nucl_ionbin_Mg" &
        .or. systype=="nucl_ionbin_MgA" .or. systype=="nucl_ionbin_Fe") then 
+       print*,"read_chains_xyz_nucl_volume"
         call read_chains_xyz_nucl_volume(info)
     else
         call read_chains_xyz_nucl(info)
@@ -750,6 +766,8 @@ subroutine read_chains_xyz_nucl_volume(info)
     use VdW_potential, only : GBenergyeffective, init_GBenergyeffective
     use VdW_potential, only : make_com_nucl_rotation
     use listfcn, only : maximum_xnucl
+    !  new 
+    use chains_spheroid, only : chain_NCP
 
     ! .. argument
 
@@ -812,6 +830,9 @@ subroutine read_chains_xyz_nucl_volume(info)
     logical :: no_overlap, isCheck
     real(dp) :: gyr_tensor(3,3)
     ! .. executable statements   
+
+
+    real(dp) :: chain_NCP_lammps(3,nseg,1)
 
     info=0
 
@@ -996,7 +1017,7 @@ subroutine read_chains_xyz_nucl_volume(info)
             chain_lammps(:,:,1)=xseg
 
             if(DEBUG)then
-                un_traj=open_chain_lammps_trj(info_traj)
+                un_traj=open_chain_lammps_trj(info_traj,"input")
                 call write_chain_lammps_trj(un_traj,chain_lammps,1)
                 close(un_traj)
             endif      
@@ -1027,7 +1048,6 @@ subroutine read_chains_xyz_nucl_volume(info)
                 return
             endif  
               
-
             ! 1. determine orientation chain_rot : n 
             ! 2. get orientation vector of all nnucl nucleosomes in chain_rot and of reference in chain_elem
                 
@@ -1068,6 +1088,17 @@ subroutine read_chains_xyz_nucl_volume(info)
                 print*,"chain=chain_rot => chain_elem_index==chain",isCheck
             endif    
 
+            ! 5.b export chain to chain_NCP used make nucleosome build
+            chain_NCP=chain_rot
+            chain_NCP_lammps(:,:,1)=chain_NCP
+
+!           if(DEBUG)then
+                un_traj=open_chain_elem_index_lammps_trj(info_traj)
+                call write_chain_elem_index_lammps_trj(un_traj,chain_elem_index)
+                close(un_traj)
+            !endif     
+
+
             ! 6.a translate conformation 
 
             rtranslate(1) =  xcm
@@ -1088,6 +1119,15 @@ subroutine read_chains_xyz_nucl_volume(info)
                 call write_chain_elem_index_lammps_trj(un_traj,chain_elem_index)
                 close(un_traj)
             endif     
+
+            !un_traj = open_chain_lammps_trj(info,"NCP")
+            !call write_chain_lammps_trj(un_traj,chain_NCP_lammps,1)
+            !close(un_traj)
+
+            !un_traj = open_chain_xyz(info,"NCP")
+            !call write_chain_xyz(un_traj,chain_NCP_lammps,1)
+            ! close(un_traj)
+
 
             ! 6. make indexconfig i.e. place conformation on lattice
               
@@ -1338,6 +1378,7 @@ subroutine read_chains_xyz_nucl_volume(info)
                 gyr_tensor             = gyr_tensor_com_rotation(rcom,nnucl)
                 Asphparam(conf)        = Asphericty_parameter(Rgsqr(conf),gyr_tensor)
           
+                ! export make_spheriod
 
                 if(COMOLD) then 
                     Rgsqr(conf)            = radius_gyration_com(chain_pbc,nnucl,segcm)
@@ -2215,25 +2256,32 @@ end subroutine write_indexconf_lammps_trj
 ! input:        integer : info : value 0 no errors
 ! output/return integer : un_trj : unit nubmer of file
 
-function open_chain_lammps_trj(info)result(un_trj)
+function open_chain_lammps_trj(info,text)result(un_trj)
 
     !use mpivars, only : rank
     use myutils, only : newunit, lenText
     use myio, only : myio_err_chainsfile
 
     integer, intent(inout) :: info
+    character(len=*), intent(in),optional :: text ! extra filename descriptor 
 
     integer :: un_trj
     ! local
     character(len=lenText) :: istr
-    character(len=25) :: fname
+    character(len=30) :: fname
     integer :: ios
     logical :: exist
     
     info = 0    
 
+    if(present(text)) then
+        fname='trajchain_'//trim(adjustl(text))//'_'
+    else
+        fname='trajchain_'
+    endif
+
     write(istr,'(I4)')0
-    fname='trajchain'//trim(adjustl(istr))//'.lammpstrj'
+    fname=trim(fname)//trim(adjustl(istr))//'.lammpstrj'
     inquire(file=fname,exist=exist)
     if(.not.exist) then
         open(unit=newunit(un_trj),file=fname,status='new',action="write",iostat=ios)
@@ -2260,26 +2308,33 @@ end function
 ! input:        integer : info : value 0 no errors
 ! output/return integer : un_trj : unit nubmer of file
 
-function open_chain_elem_index_lammps_trj(info)result(un_trj)
+function open_chain_elem_index_lammps_trj(info,text)result(un_trj)
 
     !use mpivars, only : rank
     use myutils, only : newunit, lenText
     use myio, only : myio_err_chainsfile
 
     integer, intent(inout) :: info
+    character(len=*), intent(in),optional :: text ! extra filename descriptor 
 
     integer :: un_trj
 
     ! local
     character(len=lenText) :: istr
-    character(len=35) :: fname
+    character(len=40) :: fname
     integer :: ios
     logical :: exist
     
     info = 0    
 
+    if(present(text)) then
+        fname='trajchainelemindex_'//trim(adjustl(text))//'_'
+    else
+        fname='trajchainelemindex_'
+    endif
+
     write(istr,'(I4)')0
-    fname='trajchainelemindex'//trim(adjustl(istr))//'.lammpstrj'
+    fname=trim(fname)//trim(adjustl(istr))//'.lammpstrj'
     inquire(file=fname,exist=exist)
     if(.not.exist) then
         open(unit=newunit(un_trj),file=fname,status='new',action="write",iostat=ios)
@@ -2299,6 +2354,55 @@ function open_chain_elem_index_lammps_trj(info)result(un_trj)
 
 end function
 
+! Creates and opens file for lammps xyz trajectory film
+! Writing do by write_chain_xyz
+! input:        integer : info : value 0 no errors
+! output/return integer : un_trj : unit nubmer of file
+
+function open_chain_xyz(info,text)result(un_trj)
+
+    !use mpivars, only : rank
+    use myutils, only : newunit, lenText
+    use myio, only : myio_err_chainsfile
+
+    integer, intent(inout) :: info
+    character(len=*), intent(in),optional :: text ! extra filename descriptor 
+
+    integer :: un_trj
+    ! local
+    character(len=lenText) :: istr
+    character(len=30) :: fname
+    integer :: ios
+    logical :: exist
+    
+    info = 0    
+
+    if(present(text)) then
+        fname='trajchain_'//trim(adjustl(text))//'_'
+    else
+        fname='trajchain_'
+    endif
+
+    write(istr,'(I4)')0
+    fname=trim(fname)//trim(adjustl(istr))//'.xyz'
+    inquire(file=fname,exist=exist)
+    if(.not.exist) then
+        open(unit=newunit(un_trj),file=fname,status='new',action="write",iostat=ios)
+        if(ios > 0 ) then
+            print*, 'Error opening : ',fname,' file : iostat =', ios
+            info = myio_err_chainsfile
+            return
+        endif
+    else
+        open(unit=newunit(un_trj),file=fname,position="append",status='old',action="write",iostat=ios)
+        if(ios > 0 ) then
+            print*, 'Error opening : ',fname,' file : iostat =', ios
+            info = myio_err_chainsfile
+            return
+        endif
+    endif   
+
+end function
 
 
 ! Writes the coordinates of chain object to lammps a trajectory file.
@@ -2309,9 +2413,8 @@ end function
 !        integer nchains : number of confomations
 ! return: a lammpstrj file
 
-subroutine write_chain_lammps_trj(un_trj,chain,nchains)
+subroutine write_chain_xyz(un_trj,chain,nchains)
 
-    use globals, only : nseg
     use myutils, only : newunit, lenText
     use volume, only : delta, nx, ny, nz
     use chains, only : type_of_monomer
@@ -2320,11 +2423,75 @@ subroutine write_chain_lammps_trj(un_trj,chain,nchains)
     integer, intent(in) :: nchains
     integer , intent(in) :: un_trj
     
+   
+    real(dp) :: x, y, z
+    integer ::  i, j, item
+    integer :: ndim ! local  nseg
+
+    ndim = size(chain,2) 
+
+    do j=1,nchains   
+        
+        conf_write_chain=conf_write_chain+1 
+        ! write preamble 
+        write(un_trj,*)ndim
+        write(un_trj,'(5A)')'ATOMS'
+        do item=1,ndim
+            x = chain(1,item,j)
+            y = chain(2,item,j)
+            z = chain(3,item,j)
+            write(un_trj,*)x,y,z
+        enddo    
+    enddo
+        
+end subroutine write_chain_xyz
+
+! Writes the coordinates of chain object to lammps a trajectory file.
+! Unit length in Angstrom
+! pre : file opened with open_chain_lammps_trj
+! input: integer un_trj : unit number of file to write to.
+!        real(dp) chain(:,:,:) : index 1= coordinate 2= segment/atom numnber 3 number of dublicates conformations 
+!        integer nchains : number of confomations
+! return: a lammpstrj file
+
+subroutine write_chain_lammps_trj(un_trj,chain,nchains, type_of_monomer_loc)
+
+    use myutils, only : newunit, lenText
+    use volume, only : delta, nx, ny, nz
+    use chains, only : type_of_monomer_default => type_of_monomer, mapping_num_to_char
+
+    real(dp), intent(in) :: chain(:,:,:)
+    integer, intent(in) :: nchains
+    integer, intent(in) :: un_trj
+    integer, intent(in), optional :: type_of_monomer_loc(:)
+    
+    
     character(len=lenText) :: istr
     real(dp) :: x, y, z
     integer ::  i, j, k
     real(dp) :: xbox0, xbox1(3)
-    integer :: idatom, item, moltype !, conf_write
+    integer :: idatom, item!, conf_write
+    integer :: nseg ! local  nseg
+    integer, allocatable :: type_of_monomer(:)
+    character(len=3) :: moltype
+
+    nseg = size(chain,2) 
+
+   ! allocate(type_of_monomer)
+
+    if(present(type_of_monomer_loc)) then
+        type_of_monomer = type_of_monomer_loc
+    else
+        type_of_monomer = type_of_monomer_default 
+    endif
+
+    ! Check consistency
+    if (size(type_of_monomer) /= nseg) then
+         error stop "write_chain_lammps_trj: inconsistent monomer type array size"
+    endif
+    if (size(chain,1) /= 3) error stop "Invalid chain coordinate dimension"
+    if (size(chain,3) < nchains) error stop "Invalid number of chains"
+
 
     xbox0=0.0_dp
     xbox1(1)=nx*delta*10.0_dp ! conversion to Angstrom 
@@ -2338,7 +2505,7 @@ subroutine write_chain_lammps_trj(un_trj,chain,nchains)
         write(un_trj,'(14A)')'ITEM: TIMESTEP' 
         write(un_trj,*)conf_write 
         write(un_trj,'(21A)')'ITEM: NUMBER OF ATOMS' 
-        write(un_trj,*)nseg 
+        write(un_trj,*)nseg
         write(un_trj,'(25A)')'ITEM: BOX BOUNDS ff ff ff'
         write(un_trj,*)xbox0,xbox1(1)
         write(un_trj,*)xbox0,xbox1(2)
@@ -2348,10 +2515,20 @@ subroutine write_chain_lammps_trj(un_trj,chain,nchains)
             x = chain(1,item,j)*10.0_dp
             y = chain(2,item,j)*10.0_dp
             z = chain(3,item,j)*10.0_dp
-            idatom=1
-            moltype=type_of_monomer(item) 
+            idatom=type_of_monomer(item)
+            moltype= mapping_num_to_char(type_of_monomer(item) )
             write(un_trj,*)item,idatom,moltype,x,y,z
-        enddo    
+        enddo   
+
+        ! do item=1,nseg
+        !     x = chain(1,item,j)*10.0_dp
+        !     y = chain(2,item,j)*10.0_dp
+        !     z = chain(3,item,j)*10.0_dp
+        !     idatom=1
+        !     moltype=type_of_monomer(item) 
+        !     write(un_trj,*)item,idatom,moltype,x,y,z
+        ! enddo    
+
     enddo
         
 end subroutine write_chain_lammps_trj
@@ -2388,12 +2565,10 @@ subroutine write_chain_elem_index_lammps_trj(un_trj,chain_elem_index)
     xbox1(1)=nx*delta*10.0_dp
     xbox1(2)=ny*delta*10.0_dp
     xbox1(3)=nz*delta*10.0_dp
-
     
     xcm= nx*delta*10.0_dp/2.0_dp           
     ycm= ny*delta*10.0_dp/2.0_dp          ! center box
     zcm= nz*delta*10.0_dp/2.0_dp
-
 
     item=0
     conf_write=conf_write+1
@@ -2415,9 +2590,9 @@ subroutine write_chain_elem_index_lammps_trj(un_trj,chain_elem_index)
     write(un_trj,'(29A)')'ITEM: ATOMS id mol type x y z'
     do s=1,nseg
         do j=1,nelem(s)
-            x = chain_elem_index(1,s)%elem(j)*10.0_dp +xcm
-            y = chain_elem_index(2,s)%elem(j)*10.0_dp +ycm
-            z = chain_elem_index(3,s)%elem(j)*10.0_dp +zcm
+            x = chain_elem_index(1,s)%elem(j)*10.0_dp !+xcm
+            y = chain_elem_index(2,s)%elem(j)*10.0_dp !+ycm
+            z = chain_elem_index(3,s)%elem(j)*10.0_dp !+zcm
         
             idatom=type_of_monomer(s)
             moltype=nucl_elem_type(j,type_of_monomer(s))  
@@ -3707,6 +3882,8 @@ subroutine read_nucl_orient_triplets(fname,nnucl,nuc_orient_triplet,info)
         if (present(info)) info= myio_err_readfile 
     endif    
 
+    close(un)
+    
 end subroutine read_nucl_orient_triplets
 
 ! Allocates object chain_elem
