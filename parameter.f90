@@ -746,7 +746,7 @@ contains
         x(1)= 2.0 ! 1.0_dp -(xbulksalt +xbulkidO2)           
         xguess(1)=x(1)
         
-        call solver(x, xguess, tolerance, fnorm, issolution) 
+        ! call solver(x, xguess, tolerance, fnorm, issolution)
             
         !  .. return solution
             
@@ -803,7 +803,7 @@ contains
         xguess(4)=x(4)
         xguess(5)=x(5)
         
-        call solver(x, xguess, tol_conv, fnorm, issolution) 
+        ! call solver(x, xguess, tol_conv, fnorm, issolution)
         
         !     .. return solution
         

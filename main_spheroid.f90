@@ -10,21 +10,29 @@ program main
 
     !  .. variable and constant declaractions
   
-    use globals       ! parameters definitions
-    use field
-    use parameters
+    use globals, only : cuantas, nnucl, nseg, nsegAA, nsegtypes, nsegtypesAA, systype, bctype
+   ! use field, only : allocate_field_pairs, allocate_field, allocate_field_pairs, allocate_field_triplets, init_field
+    use parameters, only : allocate_chain_parameters, init_chain_parameters, init_constants, &
+        init_vnucl_type, make_isrhoselfconsistent, set_size_neq, chainperiod, chaintype, &
+        chainmethod, maxnchainsrotations, maxnchainsrotationsxy, zpol, segcmfname, &
+        isVdW, dielect_env, write_struct
     use matrices, only : init_matrices
-    use chains
-    use chaingenerator
-    use VdW
-    use listfcn
-    use surface
-    use myio
-    use myutils
-    use dielectric_const, only : set_dielect_fcn
+    use chains, only : allocate_chains, ismonomer_chargeable, type_of_charge, segcm, mapping_num_to_char, &
+        index_phos, inverse_index_phos, len_index_phos, maxneigh, no_overlapchain, distphoscutoff
+    use chaingenerator, only : make_sequence_chain, make_charge_table, make_type_of_charge_table, &
+        make_segcom, set_properties_chain, set_mapping_num_to_char, make_chains, &
+        find_phosphate_location, write_chain_struct
+    use VdW, only : make_VdWeps
+    ! use listfcn, only : set_fcn
+    ! use surface, only : init_surface
+    use myio, only : read_inputfile, set_value_isVdW, write_chain_config
+    use myutils, only : lenText, LogUnit, open_logfile, close_logfile, print_to_log, error_handler
+    !use dielectric_const, only : set_dielect_fcn
     use modfcnFeexpl, only : init_var_compute_fdisPPP
     use chains_spheroid, only : init_chain_NCP
-    use chaingenerator_spheroid, only : init_spheroid, make_chain_spheroid_mc, read_com, build_NCP_chain
+    use chaingenerator_spheroid, only : init_spheroid, build_NCP_chain
+    use volume, only : make_geometry, nx, ny, nz, nsurf, delta, &
+        allocate_index_neighbors_phos, make_table_index_neighbors_phos
     
     implicit none
 
@@ -87,43 +95,37 @@ program main
     call error_handler(info,"init_chain_NCP")
 
     call make_chains(chainmethod,systype)   
-    call allocate_field(nx,ny,nz,nsegtypes)
+
    
     if(systype=="nucl_ionbin_Mg") then ! auxiliary array index_phos
         call find_phosphate_location(index_phos,inverse_index_phos,len_index_phos) 
         call allocate_index_neighbors_phos(maxneigh,len_index_phos)
         phoscutoff=int(distphoscutoff/delta)+2
         call make_table_index_neighbors_phos(phoscutoff,len_index_phos,index_phos) 
-        call allocate_field_pairs(nx,ny,nz,maxneigh,7,len_index_phos) ! internal systype switch !
     endif
 
     if(systype=="nucl_ionbin_MgA") then 
         phoscutoff=int(distphoscutoff/delta)+2
-        call allocate_field_pairs(nx,ny,nz,maxneigh,7,len_index_phos) ! internal systype switch !
     endif   
     
     if(systype=="nucl_ionbin_Fe") then 
         phoscutoff=int(distphoscutoff/delta)+2
-        call allocate_field_pairs(nx,ny,nz,maxneigh,7,len_index_phos) ! internal systype switch !
-        call allocate_field_triplets(11)
-        call init_var_compute_fdisPPP
+   
     endif   
     
     if(systype=="nonuclcp") then 
         no_overlapchain(1)=.true. ! otherwise loop does not start !!
     endif    
     
-    call init_field()
-    call init_surface(bctype,nsurf)
+   
     call make_isrhoselfconsistent(info)
     call set_size_neq()             ! number of non-linear equation neq
-    call set_fcn()
-    call set_dielect_fcn(dielect_env)
+   
     call write_chain_config()
     call write_chain_struct(write_struct,info) 
    ! if(write_struct) call error_handler(1,"stop after write_chains_struct")
 
-    ! call test_index_histone(info)  
+   
 
     ! .. computation starts
 
