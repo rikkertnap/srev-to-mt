@@ -723,6 +723,44 @@ subroutine rotate_chain(chain,chain_rot,a,b)
     endif
 
 end subroutine rotate_chain
+
+
+subroutine project_perpendicular(v,u,v_perp)
+
+    use quaternions, only : vec_norm
+
+    implicit none
+
+    real(dp), intent(in)  :: v(3)
+    real(dp), intent(in)  :: u(3)
+    real(dp), intent(out) :: v_perp(3)
+
+    real(dp) :: u_unit(3)
+    real(dp) :: v_norm
+    real(dp) :: u_norm
+
+    ! Normalize u
+    u_norm = vec_norm(u)
+
+    if (u_norm < epsAngle) then
+        stop "project_perpendicular: zero reference vector"
+    endif
+
+    u_unit = u/u_norm
+
+    ! Project v onto plane perpendicular to u
+    v_perp = v - dot_product(v,u_unit)*u_unit
+
+    ! Normalize projected vector
+    v_norm = vec_norm(v_perp)
+
+    if (v_norm < epsAngle) then
+        stop "project_perpendicular: vector parallel to u"
+    endif
+
+    v_perp = v_perp/v_norm
+
+end subroutine project_perpendicular
     
 
 

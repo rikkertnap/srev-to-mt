@@ -9,57 +9,29 @@
 program main
 
     !  .. variable and constant declaractions
-    ! use mpivars
+  
     use globals       ! parameters definitions
-    use physconst
-    use mathconst
-    use volume
-    use random
     use field
     use parameters
-    use matrices
-    use energy
-    use conform_entropy
+    use matrices, only : init_matrices
     use chains
     use chaingenerator
     use VdW
     use listfcn
-    use fcnpointer
-    use initxvector
     use surface
     use myio
     use myutils
-    use dielectric_const
-    use modfcnMg
-    use modfcnMgexpl
-    use modfcnFeexpl
+    use dielectric_const, only : set_dielect_fcn
+    use modfcnFeexpl, only : init_var_compute_fdisPPP
     use chains_spheroid, only : init_chain_NCP
-    use chaingenerator_spheroid, only : init_spheroid, make_chain_spheroid_mc, read_SREV, build_NCP_chain
+    use chaingenerator_spheroid, only : init_spheroid, make_chain_spheroid_mc, read_com, build_NCP_chain
     
     implicit none
 
-    real(dp),  dimension(:), allocatable :: x         ! iteration vector
-    real(dp),  dimension(:), allocatable :: xguess    ! guess iteration vector
-    real(dp),  dimension(:), allocatable :: xstored   ! stored iteration vector
-    real(dp),  dimension(:), allocatable :: fvec
-
-    integer :: i,c,num
-    logical :: use_xstored
-    logical :: isfirstguess
-    logical :: issolution
     integer :: info
     character(len=lenText) :: text, istr
     character(len=20) :: fname
-    type (looplist), pointer :: loop
-    real(dp) :: loopbegin,  loopstepsizebegin
-    real(dp), parameter :: loopeps = 1.0e-10_dp 
-    real(dp), parameter :: listeps = 1.0e-7_dp   
-    real(dp), dimension(:),  pointer :: list
-    real(dp), pointer :: list_val
-    real(dp) :: list_step
-    integer  :: nlist_elem, maxlist_elem, nlist_step
     integer :: phoscutoff
-    logical :: isVolfracLargerOne
 
     ! .. executable statements
 
@@ -154,7 +126,6 @@ program main
     ! call test_index_histone(info)  
 
     ! .. computation starts
-
 
     print*,"test-spheriod" 
     call init_spheroid(info)

@@ -38,6 +38,7 @@ module VdW_potential
     real(dp) :: vec_ref(3,3)              ! reference orientation vectors spanning plane through origin
                                           ! first index coordiantes second index number 
     real(dp) :: unit_vec_ref(3)           ! init unitvector from python program pca  
+    real(dp) :: unit_vec_ref_second(3)    ! init unitvector second orientation from python program pca
     integer  :: atom_id_unit_relative(3)  ! relative to atomid/segnumber of first AA
 
     integer :: deltaseg
@@ -379,6 +380,9 @@ contains
         ! init unitvector from python program pca 
         
         unit_vec_ref= (/0.99857452_dp, 0.02966983_dp, 0.0443692_dp/) 
+
+        ! second orientation vector
+        unit_vec_ref_second=(/-0.01656378_dp,  0.96248427_dp, -0.27083145_dp/)
 
         ! set default  reference orientation vectors spanning plane through origin
 
@@ -745,8 +749,8 @@ contains
     ! Computes value of parameteric function s and t of plane that is spanned by 
     ! v=vec[2]-vec[1] and w=vec[3]-vec[1] at origin: x= s*v + t*w +vec[1]=0  
     ! input : real(dp) :: vec(3,3) three xyz-coordinate triplets/vectors 
-    ! output: integer ::  s_ref, t_ref:  value of parameteric function plane as origin
-    !        real(dp) :: vec_origin(3)
+    ! input : integer ::  s_ref, t_ref:  value of parameteric function plane as origin
+    ! output: real(dp) :: vec_origin(3)
 
     subroutine parameter_com(vec,s_ref,t_ref,vec_origin)
 

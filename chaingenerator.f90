@@ -2425,7 +2425,7 @@ subroutine write_chain_xyz(un_trj,chain,nchains)
     
    
     real(dp) :: x, y, z
-    integer ::  i, j, item
+    integer ::  i, j, item, ios
     integer :: ndim ! local  nseg
 
     ndim = size(chain,2) 
@@ -2440,7 +2440,9 @@ subroutine write_chain_xyz(un_trj,chain,nchains)
             x = chain(1,item,j)
             y = chain(2,item,j)
             z = chain(3,item,j)
-            write(un_trj,*)x,y,z
+            write(un_trj,fmt3xyz,iostat=ios)x,y,z
+            !if(ios/=0) isReadGood=.false. 
+            ! write(un_trj,*)x,y,z
         enddo    
     enddo
         

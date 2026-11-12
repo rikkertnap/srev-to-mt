@@ -7,9 +7,10 @@ module chaingenerator_spheroid
     implicit none
 
     character(len=80), parameter :: fmt3xyz = "(3ES15.5E2)"
+    real(dp), parameter :: eps_norm = 0.0000001_dp
 
     private
-    public   :: init_spheroid, make_chain_spheroid_mc, read_SREV, build_NCP_chain
+    public   :: init_spheroid, make_chain_spheroid_mc, read_com, build_NCP_chain
 
 contains  
 
@@ -232,12 +233,12 @@ contains
 
 
     ! reed file containing center of mass/center of volume from a SREV chain
-    ! file named trajSREV.0.xyz
+    ! file named trajcom.0.xyz
     ! format file : first line <nnucl_sph>
     !               second line a comment
     !               remnaining lines: x y z      
 
-    subroutine read_SREV(rcom,info)
+    subroutine read_com(rcom,info)
 
         use globals, only : nnucl_sph
         use myio, only : myio_err_chainsfile, myio_err_nnucl_sph
@@ -246,9 +247,9 @@ contains
         real(dp), intent(inout) :: rcom(:,:)
         integer, intent(inout) :: info
 
-        ! .. local varaibles
+        ! .. local variables
 
-        character(len=12) :: fname
+        character(len=11) :: fname
         integer :: ios, un
         logical :: exist, isReadGood
         character(len=lenText) text
@@ -261,7 +262,7 @@ contains
 
         ! .. open file   
 
-        fname='trajSREV.xyz'
+        fname='trajcom.xyz'
             
         inquire(file=fname,exist=exist)
         if(exist) then
@@ -305,7 +306,94 @@ contains
 
         close(un) 
 
-    end subroutine read_SREV
+    end subroutine read_com
+
+    ! reed file containing center of mass/center of volume from a SREV chain
+    ! file named trajunitvector.0.xyz
+    ! format file : first line <nnucl_sph>
+    !               second line a comment
+    !               remnaining lines: x y z      
+
+    subroutine read_unitvector(uvec,info)
+
+        use globals, only : nnucl_sph
+        use myio, only : myio_err_chainsfile, myio_err_nnucl_sph
+        use myutils, only : lenText,LogUnit, print_to_log, newunit
+        use quaternions, only : vec_norm
+    
+    
+        real(dp), intent(inout) :: uvec(:,:)
+        integer, intent(inout) :: info
+
+        ! .. local variables
+
+        character(len=18) :: fname
+        integer :: ios, un
+        logical :: exist, isReadGood
+        character(len=lenText) text
+        integer :: nnucl_sph_file, s
+        real(dp) :: ux, uy, uz , norm_unvec
+
+        ! .. executable statements   
+
+        info=0
+
+        ! .. open file   
+
+        fname='trajunitvector.xyz'
+            
+        inquire(file=fname,exist=exist)
+        if(exist) then
+            open(unit=newunit(un),file=fname,status='old',iostat=ios)
+        else
+            print*,'traj file :',fname,' does not exit'
+            info = myio_err_chainsfile
+            return
+        endif
+        if(ios >0 ) then
+            print*, 'Error opening file : iostat =', ios
+            info = myio_err_chainsfile
+            return
+        endif
+
+        ! .. read preamble
+        read(un,*,iostat=ios)nnucl_sph_file
+        if(ios/=0) isReadGood=.false.
+        read(un,*,iostat=ios) ! skip line
+        if(ios/=0) isReadGood=.false.   
+        
+        if(nnucl_sph_file.ne.nnucl_sph) then
+            text="nnucl_sph chain file not equal internal nnucl_sph : stop program"
+            print*,"nnucl_sph_file=",nnucl_sph_file," nnucl_sph=",nnucl_sph
+            call print_to_log(LogUnit,text)
+            info=myio_err_nnucl_sph
+            return
+        endif
+
+        isReadGood=.true.
+        do s=1,nnucl_sph  ! .. read trajectory coordinates
+
+            !read(un,fmt3xyz,iostat=ios)xc,yc,zc
+            read(un,*,iostat=ios)ux,uy,uz ! read unformatted file
+            if(ios/=0) isReadGood=.false.
+        
+            uvec(1,s) = ux 
+            uvec(2,s) = uy
+            uvec(3,s) = uz 
+
+            norm_unvec = vec_norm(uvec)
+            if((norm_unvec-1.0_dp)**2>eps_norm) info = 2
+
+        enddo
+
+        if(.not.isReadGood) info=1
+        if(info==2) then 
+            print*,"unit_vector not normed"
+        endif
+
+        close(un) 
+
+    end subroutine read_unitvector
 
 
     ! Make a nucleosome chain of nnucl_sph unconnected NCPs.
@@ -331,7 +419,7 @@ contains
         use VdW_potential, only : make_com_unit_vector_nucl_rotation, GBenergyeff
         use VdW_potential, only  : write_chain_com_unitvec_lammps_trj, open_chain_com_unitvec_lammps_trj
         use chains, only : type_of_monomer
-        use chain_rotation, only : rotate_chain
+        use chain_rotation, only : rotate_chain, project_perpendicular
         use chaingenerator, only : open_chain_xyz, write_chain_xyz, write_chain_lammps_trj
     
 
@@ -344,10 +432,14 @@ contains
         real(dp) :: rcom_sph(3,nnucl_sph)       ! com of each nucloesome of chain
         real(dp) :: uvector_sph(3,nnucl_sph)    ! oreintation vector of each nucloesome of chain
         real(dp) :: chain_NCP_rot(3,nseg)       ! rotated chain_NCP
+        real(dp) :: chain_NCP_final(3,nseg)     ! rotated chain_NCP
         real(dp) :: chain_sph_xyz(3,nseg_sph,1) ! outputed NCP chains 
         logical :: DEBUG_local, no_overlap
         integer :: type_of_monomer_loc(nseg_sph) 
         real(dp) :: GBEnergy
+        real(dp) :: vvector_ref(3,1), vvector_ref_rot(3,1)
+        real(dp) :: vvector_target_perp(3), vvector_ref_perp(3)
+        real(dp) :: vvector_target(3,nnucl_sph)
 
         DEBUG_local = .true. 
  
@@ -385,28 +477,68 @@ contains
 
         ! 3. get SREV COM over every nucleosome 
 
-        call read_SREV(rcom_sph, info)
-        call error_handler(info,"read_SREV")
+        call read_com(rcom_sph, info)
+        call error_handler(info,"read_com")
 
         ! 4. make orientation of every nucleosome (rotation)
         
-        call make_random_unit_vec(uvector_sph)
+        ! call make_random_unit_vec(uvector_sph)
+        
+        call read_unitvector(uvector_sph, info)
+        call error_handler(info,"read_unitvector")
+       ! do s=1,nnucl_sph
+       !     print*,uvector_sph(:,s)
+       ! enddo  
   
         ! 5. loop over all nnucl_sph  
 
-        do n=1,nnucl_sph 
+        ! do n=1,nnucl_sph 
             
-            ! 5.a. rotate each nucleosome NCP 
-            call rotate_chain(chain_NCP,chain_NCP_rot,uvector_NCP,uvector_sph(:,n))
+        !     ! 5.a. rotate each nucleosome NCP 
+        !     call rotate_chain(chain_NCP,chain_NCP_rot,uvector_NCP,uvector_sph(:,n))
 
-            ! 5.b. translate each nucleoseme into com of SREV
+        !     ! 5.b. translate each nucleoseme into com of SREV
 
-            nseg_shift = nseg*(n-1)
-            do s=1,nseg
-                chain_sph(:,s+nseg_shift) = chain_NCP_rot(:,s)+rcom_sph(:,n)
-            enddo
+        !     nseg_shift = nseg*(n-1)
+        !     do s=1,nseg
+        !         chain_sph(:,s+nseg_shift) = chain_NCP_rot(:,s)+rcom_sph(:,n)
+        !     enddo
         
-        enddo  
+        ! enddo  
+       
+        
+
+        do n=1,nnucl_sph 
+
+            vvector_ref(:,1)   = (/0.0_dp, 1.0_dp, 0.0_dp/) ! 
+            vvector_target(:,n)= (/0.5_dp,0.5_dp,0.0_dp/) ! init target arbitrair sofar !
+
+            ! 1. Align reference NCP orientation with SREV orientation
+            call rotate_chain(chain_NCP,chain_NCP_rot, uvector_NCP,uvector_sph(:,n))
+
+            ! 2. Rotate reference azimuthal vector using the same rotation
+            call rotate_chain(vvector_ref,vvector_ref_rot, uvector_NCP,uvector_sph(:,n))
+
+            ! 3. Project both azimuthal vectors onto plane perpendicular to u
+            call project_perpendicular(vvector_ref_rot(:,1), &
+                                    uvector_sph(:,n),vvector_ref_perp)
+
+            call project_perpendicular(vvector_target(:,n), &
+                                    uvector_sph(:,n),vvector_target_perp)
+
+            ! 4. Align the azimuthal orientation
+            call rotate_chain(chain_NCP_rot,chain_NCP_final, &
+                            vvector_ref_perp,vvector_target_perp)
+
+            ! 5. Translate NCP to SREV COM
+            nseg_shift = nseg*(n-1)
+
+            do s=1,nseg
+                chain_sph(:,s+nseg_shift) = &
+                    chain_NCP_final(:,s)+rcom_sph(:,n)
+            enddo
+
+        enddo 
 
         ! 6. 
         
@@ -505,12 +637,12 @@ contains
 
         integer, intent(out) :: info
 
-        character(len=17) :: filename
+        character(len=18) :: filename
         integer :: un, n, ios
-        real(dp) :: triplet_NCP(3), triplet_shift(3), triplet_sph(3)
+        integer :: triplet_NCP(3), triplet_shift(3), triplet_sph(3)
 
         info = 0 
-        filename="nuc_orient_NCP.in"
+        filename="nucl_orient_NCP.in"
         un = open_outfile(info,filename)
 
         ! orientation triplet of NCP , only one
